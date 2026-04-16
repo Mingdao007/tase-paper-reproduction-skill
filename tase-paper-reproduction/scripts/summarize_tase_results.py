@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize current TASE MATLAB result files into fixed Markdown tables."""
+"""Summarize TASE MATLAB result files into a human-friendly Markdown report."""
 
 from __future__ import annotations
 
@@ -44,12 +44,16 @@ def git_value(repo: Path, *args: str) -> str:
 
 def verdict(match: bool, partial: bool = False, missing: bool = False) -> str:
     if missing:
-        return "missing"
+        return "Missing"
     if match:
-        return "match"
+        return "Match"
     if partial:
-        return "partial"
-    return "mismatch"
+        return "Partial"
+    return "Mismatch"
+
+
+def default_report_path(mat_path: Path) -> Path:
+    return mat_path.with_name(f"{mat_path.stem}_report.md")
 
 
 def main() -> int:
@@ -57,6 +61,7 @@ def main() -> int:
     parser.add_argument("--mat", required=True, help="Path to MATLAB .mat result file")
     parser.add_argument("--run-type", required=True, help="Run label such as paper_first")
     parser.add_argument("--repo", required=True, help="Path to git repo that produced the run")
+    parser.add_argument("--out", help="Optional path for the generated Markdown report")
     args = parser.parse_args()
 
     mat_path = Path(args.mat).expanduser().resolve()
@@ -69,7 +74,6 @@ def main() -> int:
     dq = np.asarray(data["dq_save"])
     E = np.asarray(data["E_save"]).reshape(-1)
     lam = np.asarray(data["lambda_1_save"]) if "lambda_1_save" in data else None
-    cfg = data.get("cfg")
 
     has_force = "force_error_save" in data or "f_err_save" in data or "force_save" in data
     has_position_channels = e.shape[1] >= 3
@@ -97,88 +101,150 @@ def main() -> int:
     pos_max = np.max(np.abs(e[:, :3]), axis=0) if has_position_channels else np.array([])
     ori_max = np.max(np.abs(e[:, 3:6]), axis=0) if has_orientation_channels else np.array([])
     force_series = None
+    force_meas = None
     if has_force:
         for key in ("force_error_save", "f_err_save", "force_save"):
             if key in data:
                 force_series = np.asarray(data[key]).reshape(-1)
                 break
+    if "force_meas_save" in data:
+        force_meas = np.asarray(data["force_meas_save"]).reshape(-1)
     force_converged = False
     force_partial = False
+    force_tail_mean_abs = float("nan")
+    force_final_abs = float("nan")
     if force_series is not None:
         tail = force_series[max(0, len(force_series) - 5000):]
-        tail_mean_abs = float(np.mean(np.abs(tail)))
-        final_force_abs = float(abs(force_series[-1]))
-        force_converged = tail_mean_abs < 1.0 and final_force_abs < 1.0
-        force_partial = tail_mean_abs < 2.0 and final_force_abs < 2.0
+        force_tail_mean_abs = float(np.mean(np.abs(tail)))
+        force_final_abs = float(abs(force_series[-1]))
+        force_converged = force_tail_mean_abs < 1.0 and force_final_abs < 1.0
+        force_partial = force_tail_mean_abs < 2.0 and force_final_abs < 2.0
 
     q0_matches = np.allclose(q0_current, PAPER_Q0, atol=1e-3)
     q7_match = abs(abs(q7_22) - PAPER_JOINT_LIMIT) <= 5e-2
+    pos_norm = float(np.linalg.norm(pos_final)) if pos_final.size else float("nan")
+    ori_norm = float(np.linalg.norm(ori_final)) if ori_final.size else float("nan")
+    E_end = float(E[-1])
+    E_max = float(np.max(E))
+    contact_fraction = float(np.mean(np.asarray(data["contact_active_save"]).reshape(-1))) if "contact_active_save" in data else float("nan")
+    measured_force_end = float(force_meas[-1]) if force_meas is not None else float("nan")
 
-    print("| Field | Value |")
-    print("|---|---|")
-    print(f"| Run type | `{args.run_type}` |")
-    print(f"| Result file | `{mat_path}` |")
-    print(f"| Branch | `{branch}` (`{commit}`) |")
-    print(f"| Dirty state | `{dirty}` |")
-    print(f"| Duration / steps | `{fmt_float(float(t[-1]), 3)} s / {len(t)}` |")
-    print(f"| Key final metrics | `E_end={fmt_float(float(E[-1]), 6)}`, `q7@22s={fmt_float(q7_22, 4)}` |")
-    print()
-
-    print("| Paper item | Paper truth | Current result | Verdict |")
-    print("|---|---|---|---|")
-    print(
-        f"| Fig. 6(c) force error | `fd = 5 N` and convergent force error curve | "
-        f"{'force variable present' if has_force else 'no force-error state in .mat'} | "
-        f"{verdict(force_converged, partial=force_partial, missing=not has_force)} |"
-    )
-    print(
-        f"| `q7 @ 22 s` | seventh joint reaches `±2.5 rad` | "
-        f"`q7(22s)={fmt_float(q7_22, 4)}` | {verdict(q7_match)} |"
-    )
-    print(
-        f"| Joint velocity pattern | start-up velocity limit hit | "
-        f"`max|dq|={fmt_vec(dq_abs_max, 3)}` | {verdict(False, partial=near_vel_limit)} |"
-    )
-    print(
-        f"| Position error | convergent | `final={fmt_vec(pos_final, 6)}`, `max={fmt_vec(pos_max, 4)}` | "
-        f"{verdict(np.linalg.norm(pos_final) < 5e-3, partial=True)} |"
-    )
-    print(
-        f"| Orientation error | convergent | `final={fmt_vec(ori_final, 6)}`, `max={fmt_vec(ori_max, 4)}` | "
-        f"{verdict(np.linalg.norm(ori_final) < 5e-3, partial=True)} |"
-    )
-    print(
-        f"| Scene assumptions | paper simulation scene | "
-        f"`q0_match={q0_matches}`, `first_limit={first_limit_text}` | "
-        f"{verdict(q0_matches and q7_match)} |"
-    )
-    print()
-
-    print("| Gap | Evidence | Why it blocks paper-faithful claim |")
-    print("|---|---|---|")
     if not has_force:
-        print("| Force loop absent | No force-error variable saved in the result file | Fig. 6(c) cannot be claimed or compared |")
+        current_verdict = "Not paper-faithful yet."
+        biggest_blocker = "Fig. 6(c) still has no force-error subsystem."
+        next_action = "Add the minimum force/contact chain and log force error."
     elif not force_converged:
-        final_force_abs = float(abs(force_series[-1]))
-        print(f"| Force error not converged | `final |e_f|={fmt_float(final_force_abs, 4)}` | Fig. 6(c) exists but still does not satisfy the paper claim of convergence |")
-    if not q0_matches:
-        print("| Initial state differs | Current run does not start from the paper `q0` | Joint-limit timing and velocity shape are not directly comparable |")
-    if not q7_match:
-        print(f"| `q7@22s` mismatch | Current `q7(22s)={fmt_float(q7_22, 4)}` | The paper's most explicit Fig. 6 timing landmark is not matched |")
-    if float(np.max(E)) > 1.0:
-        print(f"| Residual spike | `E_max={fmt_float(float(np.max(E)), 4)}` | The current inner-loop shape still differs materially from the paper plots |")
-    print()
-
-    print("| Priority | Action | Expected effect |")
-    print("|---|---|---|")
-    if not has_force:
-        print("| 1 | Add the minimum force/contact chain and log force error | Enables a real Fig. 6(c) comparison and changes motion distribution under contact |")
-    elif not force_converged:
-        print("| 1 | Stabilize the force/contact loop before chasing later shape details | Keeps contact active and turns Fig. 6(c) from present-but-wrong into convergent |")
-    elif not q0_matches:
-        print("| 1 | Split `paper_ideal` from `step_surface` and restore paper `q0` in the paper line | Makes `q7@22s` and early velocity saturation comparable to the paper |")
+        current_verdict = "Not paper-faithful yet."
+        biggest_blocker = "Force/contact exists but does not stay engaged, so Fig. 6(c) still fails."
+        next_action = "Stabilize force/contact retention before tuning any later-shape details."
+    elif not q7_match:
+        current_verdict = "Partially matching, but still not paper-faithful."
+        biggest_blocker = "The paper's clearest timing landmark, q7 hitting the limit at 22 s, is still missing."
+        next_action = "Make the paper_ideal scene more comparable before chasing secondary plot shape details."
     else:
-        print("| 1 | Diagnose the `19–20 s` spike with Jacobian condition and clamp activity traces | Targets the remaining shape mismatch without mixing scene changes |")
+        current_verdict = "Close on the core paper landmarks."
+        biggest_blocker = "Only secondary plot-shape differences remain."
+        next_action = "Diagnose the remaining spike and start-up velocity shape."
+
+    force_line = (
+        f"{verdict(force_converged, partial=force_partial, missing=not has_force)}: "
+        + (
+            "result file still has no force-error state."
+            if not has_force
+            else f"force channel exists, final |e_f|={fmt_float(force_final_abs, 4)} N, "
+            f"tail mean |e_f|={fmt_float(force_tail_mean_abs, 4)} N, "
+            f"final measured force={fmt_float(measured_force_end, 4)} N."
+        )
+    )
+    q7_line = (
+        f"{verdict(q7_match)}: paper expects the seventh joint near ±2.5 rad at 22 s, "
+        f"current q7(22 s)={fmt_float(q7_22, 4)} rad."
+    )
+    vel_line = (
+        f"{verdict(False, partial=near_vel_limit)}: paper shows start-up velocity saturation, "
+        f"current max |dq|={fmt_vec(dq_abs_max, 3)} rad/s."
+    )
+    pos_line = (
+        f"{verdict(pos_norm < 5e-3, partial=pos_norm < 5e-2)}: "
+        f"final position error={fmt_vec(pos_final, 6)} m, max={fmt_vec(pos_max, 4)} m."
+    )
+    ori_line = (
+        f"{verdict(ori_norm < 5e-3, partial=ori_norm < 5e-2)}: "
+        f"final orientation error={fmt_vec(ori_final, 6)}, max={fmt_vec(ori_max, 4)}."
+    )
+    scene_line = (
+        f"{verdict(q0_matches and q7_match, partial=q0_matches)}: "
+        f"q0_match={q0_matches}, first limit event={first_limit_text}."
+    )
+
+    blocking_gaps: list[str] = []
+    if not has_force:
+        blocking_gaps.append(
+            "- Force loop absent: no force-error variable is saved, so Fig. 6(c) cannot be claimed at all."
+        )
+    elif not force_converged:
+        blocking_gaps.append(
+            f"- Force/contact not retained: final |e_f|={fmt_float(force_final_abs, 4)} N, "
+            f"contact fraction={fmt_float(contact_fraction, 4)}. This blocks a paper-faithful Fig. 6(c)."
+        )
+    if not q0_matches:
+        blocking_gaps.append(
+            "- Initial state differs from paper q0: joint-limit timing and early velocity shape are no longer directly comparable."
+        )
+    if not q7_match:
+        blocking_gaps.append(
+            f"- q7 landmark still misses: q7(22 s)={fmt_float(q7_22, 4)} rad instead of about ±2.5 rad."
+        )
+    if E_max > 1.0:
+        blocking_gaps.append(
+            f"- Residual inner-loop spike remains: E_max={fmt_float(E_max, 4)}, so the plot shape still differs materially."
+        )
+    if not blocking_gaps:
+        blocking_gaps.append("- No major blocking gaps detected from the saved signals.")
+
+    report_lines = [
+        f"# TASE Run Report: {args.run_type}",
+        "",
+        "## Quick Verdict",
+        f"- Current verdict: {current_verdict}",
+        f"- Best-matching part: orientation convergence is the cleanest match right now with final error norm {fmt_float(ori_norm, 6)}.",
+        f"- Biggest blocker: {biggest_blocker}",
+        f"- Next step: {next_action}",
+        "",
+        "## Run Snapshot",
+        f"- Run type: `{args.run_type}`",
+        f"- Result file: `{mat_path}`",
+        f"- Branch / commit: `{branch}` / `{commit}`",
+        f"- Dirty state: `{dirty}`",
+        f"- Duration / steps: `{fmt_float(float(t[-1]), 3)} s / {len(t)}`",
+        f"- Key end metrics: `E_end={fmt_float(E_end, 6)}`, `q7@22s={fmt_float(q7_22, 4)}`, "
+        + (f"`final |e_f|={fmt_float(force_final_abs, 4)} N`, " if has_force else "")
+        + f"`|e_p(final)|={fmt_float(pos_norm, 6)}`, `|e_o(final)|={fmt_float(ori_norm, 6)}`",
+        "",
+        "## Current vs Paper",
+        f"- Fig. 6(c) force error: {force_line}",
+        f"- q7 @ 22 s: {q7_line}",
+        f"- Joint velocity pattern: {vel_line}",
+        f"- Position error: {pos_line}",
+        f"- Orientation error: {ori_line}",
+        f"- Scene assumptions: {scene_line}",
+        "",
+        "## Blocking Gaps",
+        *blocking_gaps,
+        "",
+        "## Next Single Action",
+        f"- {next_action} This is the highest-leverage move because it addresses the largest paper-side mismatch first.",
+        "",
+    ]
+
+    report_text = "\n".join(report_lines)
+    out_path = Path(args.out).expanduser().resolve() if args.out else default_report_path(mat_path)
+    out_path.write_text(report_text, encoding="utf-8")
+
+    print(f"Report written to: {out_path}")
+    print(f"Current verdict: {current_verdict}")
+    print(f"Biggest blocker: {biggest_blocker}")
+    print(f"Next step: {next_action}")
 
     return 0
 

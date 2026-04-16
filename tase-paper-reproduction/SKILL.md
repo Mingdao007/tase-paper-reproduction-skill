@@ -24,9 +24,10 @@ This skill is narrow on purpose. It is not a generic robot-control paper skill.
    - `paper_ideal`
    - `step_surface`
 5. If the user asks for current status after a run, use `scripts/summarize_tase_results.py` on the `.mat` result first.
-6. Always report the result in the fixed table format from `references/report-table-contract.md`.
-7. If the result is missing `force error`, say it is an unimplemented subsystem, not a tuning issue.
-8. If a run mixes paper-style claims with STEP geometry or `q0_contact`, call out that it is not paper-faithful.
+6. By default, generate a human-friendly Markdown report file next to the `.mat` result using the contract in `references/report-table-contract.md`.
+7. In chat, give only a short verdict, the biggest remaining mismatch, and the report path unless the user explicitly asks for the full content inline.
+8. If the result is missing `force error`, say it is an unimplemented subsystem, not a tuning issue.
+9. If a run mixes paper-style claims with STEP geometry or `q0_contact`, call out that it is not paper-faithful.
 
 ## Decision Rules
 
@@ -39,14 +40,11 @@ This skill is narrow on purpose. It is not a generic robot-control paper skill.
 
 ## Result Contract
 
-After every simulation run, return four Markdown tables:
+After every simulation run:
 
-1. `Run Summary`
-2. `Current vs Paper`
-3. `Blocking Gaps`
-4. `Next Single Action`
-
-Use `references/report-table-contract.md` verbatim for the columns and wording style.
+1. Generate one Markdown report file next to the `.mat` result.
+2. Use the section structure and wording rules from `references/report-table-contract.md`.
+3. In chat, summarize the report in 2-4 short lines instead of dumping wide tables.
 
 ## Force-Loop Priority
 
