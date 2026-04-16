@@ -96,18 +96,23 @@ def main() -> int:
     ori_final = e[-1, 3:6] if has_orientation_channels else np.array([])
     pos_max = np.max(np.abs(e[:, :3]), axis=0) if has_position_channels else np.array([])
     ori_max = np.max(np.abs(e[:, 3:6]), axis=0) if has_orientation_channels else np.array([])
-
-    q0_matches = np.allclose(q0_current, PAPER_Q0, atol=1e-3)
-    q7_match = abs(abs(q7_22) - PAPER_JOINT_LIMIT) <= 5e-2
-    force_partial = False
+    force_series = None
     if has_force:
-        force_series = None
-        for key in ("force_error_save", "f_err_save"):
+        for key in ("force_error_save", "f_err_save", "force_save"):
             if key in data:
                 force_series = np.asarray(data[key]).reshape(-1)
                 break
-        if force_series is not None:
-            force_partial = abs(float(force_series[-1])) < 0.2
+    force_converged = False
+    force_partial = False
+    if force_series is not None:
+        tail = force_series[max(0, len(force_series) - 5000):]
+        tail_mean_abs = float(np.mean(np.abs(tail)))
+        final_force_abs = float(abs(force_series[-1]))
+        force_converged = tail_mean_abs < 1.0 and final_force_abs < 1.0
+        force_partial = tail_mean_abs < 2.0 and final_force_abs < 2.0
+
+    q0_matches = np.allclose(q0_current, PAPER_Q0, atol=1e-3)
+    q7_match = abs(abs(q7_22) - PAPER_JOINT_LIMIT) <= 5e-2
 
     print("| Field | Value |")
     print("|---|---|")
@@ -124,7 +129,7 @@ def main() -> int:
     print(
         f"| Fig. 6(c) force error | `fd = 5 N` and convergent force error curve | "
         f"{'force variable present' if has_force else 'no force-error state in .mat'} | "
-        f"{verdict(False, partial=force_partial, missing=not has_force)} |"
+        f"{verdict(force_converged, partial=force_partial, missing=not has_force)} |"
     )
     print(
         f"| `q7 @ 22 s` | seventh joint reaches `±2.5 rad` | "
@@ -153,6 +158,9 @@ def main() -> int:
     print("|---|---|---|")
     if not has_force:
         print("| Force loop absent | No force-error variable saved in the result file | Fig. 6(c) cannot be claimed or compared |")
+    elif not force_converged:
+        final_force_abs = float(abs(force_series[-1]))
+        print(f"| Force error not converged | `final |e_f|={fmt_float(final_force_abs, 4)}` | Fig. 6(c) exists but still does not satisfy the paper claim of convergence |")
     if not q0_matches:
         print("| Initial state differs | Current run does not start from the paper `q0` | Joint-limit timing and velocity shape are not directly comparable |")
     if not q7_match:
@@ -165,6 +173,8 @@ def main() -> int:
     print("|---|---|---|")
     if not has_force:
         print("| 1 | Add the minimum force/contact chain and log force error | Enables a real Fig. 6(c) comparison and changes motion distribution under contact |")
+    elif not force_converged:
+        print("| 1 | Stabilize the force/contact loop before chasing later shape details | Keeps contact active and turns Fig. 6(c) from present-but-wrong into convergent |")
     elif not q0_matches:
         print("| 1 | Split `paper_ideal` from `step_surface` and restore paper `q0` in the paper line | Makes `q7@22s` and early velocity saturation comparable to the paper |")
     else:
