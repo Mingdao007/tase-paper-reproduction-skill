@@ -1,0 +1,4 @@
+interface:
+  display_name: "TASE Paper Reproduction"
+  short_description: "Audit and iterate the TASE paper simulation workflow"
+  default_prompt: "Use $tase-paper-reproduction to audit the current Xu et al. 2026 TASE paper reproduction, compare the latest results against Fig. 5 and Fig. 6, and report the remaining gaps before the next simulation step."
