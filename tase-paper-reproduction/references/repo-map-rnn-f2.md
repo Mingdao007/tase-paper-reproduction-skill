@@ -1,16 +1,23 @@
 # RNN_F2 Repo Map
 
-Local repo root:
+Local working repo root:
 
 - `/home/andy/Documents/UR5e_ws/RNN_F2`
+
+Original baseline source of truth:
+
+- `/home/andy/Documents/UR5e_ws/RNN_F2_baseline`
 
 ## Key files
 
 | Path | Role | Notes |
 |---|---|---|
-| `main.m` | Original as-received baseline | Legacy task and inner-loop scaffold |
+| `../RNN_F2_baseline/main.m` | Original as-received baseline | Primary source of truth for the supplied code |
+| `main.m` | Mirror copy of baseline main | Matches `RNN_F2_baseline/main.m` |
+| `../RNN_F2_baseline/forward.m` | Original baseline forward kinematics | Source of truth for legacy baseline behavior |
+| `../RNN_F2_baseline/getJacobian.m` | Original baseline Jacobian | Source of truth for legacy baseline behavior |
 | `config_audit.m` | Current parameter registry | Mixes `from_rnn_f2`, `from_paper`, and `assumed` |
-| `run_baseline.m` | Batch baseline entry | Preserves original line for comparison |
+| `run_baseline.m` | Batch baseline entry | Later wrapper for export and comparison, not the original baseline itself |
 | `run_paper_first.m` | Current paper-inspired line | Uses DH Panda, STP surface, `q0_contact`, `normal-only` orientation |
 | `plot_paper_first.m` | Current figure export | Exports 7 PNGs, not full paper contract |
 | `surface_bspline.m` | Local STP-derived B-spline surface | Geometry proxy, not paper truth |
@@ -33,6 +40,8 @@ Local repo root:
 | `results/paper_first/fig7_surface_normal.png` | Local extra diagnostic |
 
 ## Important boundary
+
+When the user says `baseline`, `original code`, or `code-first`, default to `RNN_F2_baseline/` as the reference source, not `run_baseline.m`.
 
 `run_paper_first.m` is an exploratory bridge. It does not yet implement:
 

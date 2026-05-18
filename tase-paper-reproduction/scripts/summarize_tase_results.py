@@ -80,6 +80,20 @@ def main() -> int:
     has_orientation_channels = e.shape[1] >= 6
 
     q0_current = q[0]
+    orientation_mode = "unknown"
+    if "orientation_mode" in data:
+        raw_mode = data["orientation_mode"]
+        if isinstance(raw_mode, np.ndarray):
+            orientation_mode = "".join(str(x) for x in raw_mode.flatten()).strip()
+        else:
+            orientation_mode = str(raw_mode)
+    solver_mode = "unknown"
+    if "solver_mode" in data:
+        raw_solver = data["solver_mode"]
+        if isinstance(raw_solver, np.ndarray):
+            solver_mode = "".join(str(x) for x in raw_solver.flatten()).strip()
+        else:
+            solver_mode = str(raw_solver)
     idx_22 = int(np.argmin(np.abs(t - 22.0)))
     q7_22 = float(q[idx_22, 6]) if q.shape[1] >= 7 else float("nan")
     q_abs_max = np.max(np.abs(q), axis=0)
@@ -174,7 +188,7 @@ def main() -> int:
     )
     scene_line = (
         f"{verdict(q0_matches and q7_match, partial=q0_matches)}: "
-        f"q0_match={q0_matches}, first limit event={first_limit_text}."
+        f"q0_match={q0_matches}, orientation_mode={orientation_mode}, solver_mode={solver_mode}, first limit event={first_limit_text}."
     )
 
     blocking_gaps: list[str] = []
@@ -213,6 +227,8 @@ def main() -> int:
         "",
         "## Run Snapshot",
         f"- Run type: `{args.run_type}`",
+        f"- Orientation mode: `{orientation_mode}`",
+        f"- Solver mode: `{solver_mode}`",
         f"- Result file: `{mat_path}`",
         f"- Branch / commit: `{branch}` / `{commit}`",
         f"- Dirty state: `{dirty}`",

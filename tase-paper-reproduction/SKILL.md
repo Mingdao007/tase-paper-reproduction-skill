@@ -15,23 +15,25 @@ This skill is narrow on purpose. It is not a generic robot-control paper skill.
 
 ## Workflow
 
-1. Read `references/paper-truth.md` before making claims about whether a run matches the paper.
-2. Read `references/current-gap-audit.md` to understand what is still missing or structurally different.
-3. Read `references/repo-map-rnn-f2.md` before editing or reviewing code paths in `RNN_F2`.
-4. Classify the current run as one of:
+1. If the user asks to locate or read the paper itself, follow a local-first paper lookup: go to local Zotero storage first. If `references/paper-truth.md` already records the exact PDF path, use it only as a shortcut into that Zotero storage location.
+2. Read `references/paper-truth.md` before making claims about whether a run matches the paper.
+3. Read `references/current-gap-audit.md` to understand what is still missing or structurally different.
+4. Read `references/repo-map-rnn-f2.md` before editing or reviewing code paths in `RNN_F2`.
+5. Classify the current run as one of:
    - `baseline_rnn_f2`
    - `paper_first`
    - `paper_ideal`
    - `step_surface`
-5. If the user asks for current status after a run, use `scripts/summarize_tase_results.py` on the `.mat` result first.
-6. By default, generate a human-friendly Markdown report file next to the `.mat` result using the contract in `references/report-table-contract.md`.
-7. In chat, give only a short verdict, the biggest remaining mismatch, and the report path unless the user explicitly asks for the full content inline.
-8. If the result is missing `force error`, say it is an unimplemented subsystem, not a tuning issue.
-9. If a run mixes paper-style claims with STEP geometry or `q0_contact`, call out that it is not paper-faithful.
+6. If the user asks for current status after a run, use `scripts/summarize_tase_results.py` on the `.mat` result first.
+7. By default, generate a human-friendly Markdown report file next to the `.mat` result using the contract in `references/report-table-contract.md`.
+8. In chat, give only a short verdict, the biggest remaining mismatch, and the report path unless the user explicitly asks for the full content inline.
+9. If the result is missing `force error`, say it is an unimplemented subsystem, not a tuning issue.
+10. If a run mixes paper-style claims with STEP geometry or `q0_contact`, call out that it is not paper-faithful.
 
 ## Decision Rules
 
 - Treat the paper PDF and `references/paper-truth.md` as the source of truth for `q0`, limits, Fig. 5 timings, and the declared Fig. 6 channels.
+- For paper lookup, treat local Zotero storage as the primary source; treat `references/paper-truth.md` as a convenience pointer when it is already available.
 - Treat `run_paper_first.m` as an exploratory bridge, not as proof that the paper was reproduced.
 - Keep `paper_ideal` and `step_surface` separate. Do not collapse them into one line of results.
 - Keep `normal-only` orientation reporting unless a better paper-faithful orientation specification is discovered.
